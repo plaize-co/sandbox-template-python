@@ -1,0 +1,19 @@
+# Sandbox app metadata. Required for CI validation and Sandbox Apps registry sync.
+
+name: "Hello sandbox (python)"     # display name
+owner: "urara"                      # creator's short id (matches subdomain prefix). [a-z0-9]+, no hyphens.
+app: "hello-py"                     # short app slug. [a-z0-9-]+, max 49 chars.
+runtime: "python"                   # python | node | static
+
+data: {}                            # Set this if the app uses Notion or Firestore:
+                                    # data:
+                                    #   notion:
+                                    #     - id: "<DB id>"
+                                    #       access: "read-write"
+                                    #   firestore: true
+
+# --- Lifetime: pick one ---
+expires_at: 2026-11-15              # temporary (default). Max +180 days from creation.
+# lifetime: permanent               # uncomment + delete expires_at for long-term apps.
+
+purpose: "Starter for a Python FastAPI sandbox app."

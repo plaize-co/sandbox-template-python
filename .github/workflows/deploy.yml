@@ -1,0 +1,127 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  GCP_PROJECT: plaize-sandbox-prod
+  GCP_REGION: asia-northeast1
+  AR_REPO: sandbox-apps
+  WIF_PROVIDER: projects/760435810995/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  DEPLOYER_SA: github-sandbox-deployer@plaize-sandbox-prod.iam.gserviceaccount.com
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml==6.0.2
+      - run: python build/validate-sandbox.py sandbox.yaml
+
+  deploy:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml==6.0.2
+
+      - name: read sandbox.yaml
+        id: meta
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import yaml
+          d = yaml.safe_load(open("sandbox.yaml"))
+          print(f"owner={d['owner']}")
+          print(f"app={d['app']}")
+          print(f"service=app--{d['owner']}--{d['app']}")
+          # If the app declares Notion data, expose secret name
+          data = d.get("data") or {}
+          uses_notion = bool(data.get("notion"))
+          uses_firestore = bool(data.get("firestore"))
+          print(f"uses_notion={'1' if uses_notion else '0'}")
+          print(f"uses_firestore={'1' if uses_firestore else '0'}")
+          PY
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: configure docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: ensure per-app SA exists
+        run: |
+          SA_NAME="app-${{ steps.meta.outputs.owner }}-${{ steps.meta.outputs.app }}"
+          SA_EMAIL="${SA_NAME}@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com"
+          if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="${{ env.GCP_PROJECT }}" >/dev/null 2>&1; then
+            echo "Creating SA $SA_NAME..."
+            gcloud iam service-accounts create "$SA_NAME" \
+              --display-name="sandbox app: ${{ steps.meta.outputs.owner }}/${{ steps.meta.outputs.app }}" \
+              --project="${{ env.GCP_PROJECT }}"
+            sleep 8
+          else
+            echo "SA $SA_NAME already exists."
+          fi
+
+      - name: build and push image
+        run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.AR_REPO }}/${{ steps.meta.outputs.service }}:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: build deploy flags
+        id: flags
+        run: |
+          # Base env vars injected to every Python sandbox app
+          ENV_VARS="^|^SANDBOX_OWNER=${{ steps.meta.outputs.owner }}|SANDBOX_APP=${{ steps.meta.outputs.app }}|APP_NAME=$(yq -r .name sandbox.yaml 2>/dev/null || echo sandbox)"
+          echo "env_vars=$ENV_VARS" >> "$GITHUB_OUTPUT"
+
+          # Secrets: only mount NOTION_TOKEN if app uses Notion
+          if [ "${{ steps.meta.outputs.uses_notion }}" = "1" ]; then
+            echo "secrets=NOTION_TOKEN=app--${{ steps.meta.outputs.owner }}--${{ steps.meta.outputs.app }}--notion-token:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "secrets=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: deploy to Cloud Run
+        run: |
+          # ingress=all + --no-allow-unauthenticated: traffic comes through router with
+          # identity tokens (router SA has project-level run.invoker). Public *.run.app
+          # URLs return 401 without a token, so URL leakage is not a vulnerability.
+          DEPLOY_FLAGS=(
+            --image "$IMAGE"
+            --project "${{ env.GCP_PROJECT }}"
+            --region "${{ env.GCP_REGION }}"
+            --platform managed
+            --ingress all
+            --no-allow-unauthenticated
+            --port 8080
+            --cpu 1 --memory 256Mi
+            --min-instances 0 --max-instances 3
+            --service-account "app-${{ steps.meta.outputs.owner }}-${{ steps.meta.outputs.app }}@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com"
+            --set-env-vars "${{ steps.flags.outputs.env_vars }}"
+            --labels "owner=${{ steps.meta.outputs.owner }},app=${{ steps.meta.outputs.app }},managed-by=sandbox-platform,runtime=python"
+          )
+          if [ -n "${{ steps.flags.outputs.secrets }}" ]; then
+            DEPLOY_FLAGS+=(--set-secrets "${{ steps.flags.outputs.secrets }}")
+          fi
+          gcloud run deploy "${{ steps.meta.outputs.service }}" "${DEPLOY_FLAGS[@]}"
