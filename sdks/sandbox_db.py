@@ -13,6 +13,39 @@ The owner and app slug come from env vars set by the deploy workflow:
 
 This module is OPTIONAL — only import if your app uses Firestore. You also
 need to add `google-cloud-firestore` to requirements.txt.
+
+== Isolation model (PLAN A) ==
+
+The sandbox cluster intentionally runs ONE shared Firestore DB (`sandbox`)
+and relies on THIS SDK to keep apps in their own `apps/{owner}--{app}/`
+prefix. There is NO IAM-level enforcement: every per-app SA holds
+unconditional `roles/datastore.user` and can technically read or write any
+document in the `sandbox` DB if it bypasses this wrapper.
+
+We tried using IAM conditions (`resource.name.startsWith(...)`) to enforce
+per-app prefixes, but Firestore Native evaluates the condition against the
+database resource for Commit/write operations, not the document path — so
+the condition is always false. Documented in plan §11-5.
+
+This fits a 10-person trusted team. **Don't put PII in Firestore under this
+model.** If you need stronger isolation, see PLAN B below.
+
+== PLAN B — per-app named Firestore DB (upgrade path) ==
+
+If an app needs true isolation (e.g. handling customer PII):
+
+  1. Create a dedicated named DB at app-creation time:
+        gcloud firestore databases create \\
+          --database=sandbox-{owner}--{app} \\
+          --location=asia-northeast1 --type=firestore-native
+  2. Grant the per-app SA `roles/datastore.user` with condition:
+        resource.name == "projects/.../databases/sandbox-{owner}--{app}"
+     (This DOES enforce — the condition evaluates against the DB resource,
+     which is unique per app.)
+  3. Override `SANDBOX_FIRESTORE_DB` env var to the per-app DB name.
+
+Limits to plan around: ~100 DBs per project. At 10 employees × ~5 apps
+each ≈ 50 DBs, fine with headroom.
 """
 from __future__ import annotations
 

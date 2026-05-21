@@ -81,21 +81,32 @@ jobs:
             echo "SA $SA_NAME already exists."
           fi
 
-      - name: grant Firestore IAM condition (if app uses Firestore)
+      - name: grant Firestore access (if app uses Firestore)
         if: steps.meta.outputs.uses_firestore == '1'
         run: |
-          # Restrict this app's SA to only its own Firestore prefix:
-          #   apps/{owner}--{app}/ in the "sandbox" named DB.
-          # add-iam-policy-binding with an identical condition is idempotent (no duplicates).
+          # PLAN A — SDK-only isolation, no IAM enforcement.
+          #
+          # We originally tried to scope this binding with an IAM condition
+          #   resource.name.startsWith("projects/.../documents/apps/{owner}--{app}/")
+          # but Firestore Native evaluates that condition against the *database*
+          # resource (projects/.../databases/sandbox), not the document path —
+          # so the condition is always false, and the SA can't write at all.
+          #
+          # For now we grant the SA unconditional datastore.user. Per-app
+          # isolation is enforced by sdks/sandbox_db.py auto-prefixing every
+          # read/write to apps/{owner}--{app}/. This relies on apps using
+          # the SDK (the social trust model fits a 10-person team).
+          #
+          # When stronger isolation is needed (e.g. PII in Firestore), switch
+          # to PLAN B: per-app named Firestore DB ("sandbox-{owner}--{app}").
+          # See plan §1-3 and §11-5 for the upgrade path.
           OWNER="${{ steps.meta.outputs.owner }}"
           APP="${{ steps.meta.outputs.app }}"
           SA_EMAIL="app-${OWNER}-${APP}@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com"
-          PREFIX="projects/${{ env.GCP_PROJECT }}/databases/sandbox/documents/apps/${OWNER}--${APP}/"
-          CONDITION="expression=resource.name.startsWith(\"${PREFIX}\"),title=firestore-${OWNER}--${APP}"
           gcloud projects add-iam-policy-binding "${{ env.GCP_PROJECT }}" \
             --member="serviceAccount:${SA_EMAIL}" \
             --role="roles/datastore.user" \
-            --condition="${CONDITION}"
+            --condition=None
 
       - name: build and push image
         run: |
