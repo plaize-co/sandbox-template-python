@@ -81,6 +81,22 @@ jobs:
             echo "SA $SA_NAME already exists."
           fi
 
+      - name: grant Firestore IAM condition (if app uses Firestore)
+        if: steps.meta.outputs.uses_firestore == '1'
+        run: |
+          # Restrict this app's SA to only its own Firestore prefix:
+          #   apps/{owner}--{app}/ in the "sandbox" named DB.
+          # add-iam-policy-binding with an identical condition is idempotent (no duplicates).
+          OWNER="${{ steps.meta.outputs.owner }}"
+          APP="${{ steps.meta.outputs.app }}"
+          SA_EMAIL="app-${OWNER}-${APP}@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com"
+          PREFIX="projects/${{ env.GCP_PROJECT }}/databases/sandbox/documents/apps/${OWNER}--${APP}/"
+          CONDITION="expression=resource.name.startsWith(\"${PREFIX}\"),title=firestore-${OWNER}--${APP}"
+          gcloud projects add-iam-policy-binding "${{ env.GCP_PROJECT }}" \
+            --member="serviceAccount:${SA_EMAIL}" \
+            --role="roles/datastore.user" \
+            --condition="${CONDITION}"
+
       - name: build and push image
         run: |
           IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.AR_REPO }}/${{ steps.meta.outputs.service }}:${{ github.sha }}"
