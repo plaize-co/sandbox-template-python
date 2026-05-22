@@ -67,46 +67,9 @@ jobs:
       - name: configure docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: ensure per-app SA exists
-        run: |
-          SA_NAME="app-${{ steps.meta.outputs.owner }}-${{ steps.meta.outputs.app }}"
-          SA_EMAIL="${SA_NAME}@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com"
-          if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="${{ env.GCP_PROJECT }}" >/dev/null 2>&1; then
-            echo "Creating SA $SA_NAME..."
-            gcloud iam service-accounts create "$SA_NAME" \
-              --display-name="sandbox app: ${{ steps.meta.outputs.owner }}/${{ steps.meta.outputs.app }}" \
-              --project="${{ env.GCP_PROJECT }}"
-            sleep 8
-          else
-            echo "SA $SA_NAME already exists."
-          fi
-
-      - name: grant Firestore access (if app uses Firestore)
-        if: steps.meta.outputs.uses_firestore == '1'
-        run: |
-          # PLAN A — SDK-only isolation, no IAM enforcement.
-          #
-          # We originally tried to scope this binding with an IAM condition
-          #   resource.name.startsWith("projects/.../documents/apps/{owner}--{app}/")
-          # but Firestore Native evaluates that condition against the *database*
-          # resource (projects/.../databases/sandbox), not the document path —
-          # so the condition is always false, and the SA can't write at all.
-          #
-          # For now we grant the SA unconditional datastore.user. Per-app
-          # isolation is enforced by sdks/sandbox_db.py auto-prefixing every
-          # read/write to apps/{owner}--{app}/. This relies on apps using
-          # the SDK (the social trust model fits a 10-person team).
-          #
-          # When stronger isolation is needed (e.g. PII in Firestore), switch
-          # to PLAN B: per-app named Firestore DB ("sandbox-{owner}--{app}").
-          # See plan §1-3 and §11-5 for the upgrade path.
-          OWNER="${{ steps.meta.outputs.owner }}"
-          APP="${{ steps.meta.outputs.app }}"
-          SA_EMAIL="app-${OWNER}-${APP}@${{ env.GCP_PROJECT }}.iam.gserviceaccount.com"
-          gcloud projects add-iam-policy-binding "${{ env.GCP_PROJECT }}" \
-            --member="serviceAccount:${SA_EMAIL}" \
-            --role="roles/datastore.user" \
-            --condition=None
+      # Per-app SA creation + Firestore IAM grant happen MCP-side in `sandbox_new`,
+      # not in this workflow — keeps the deployer SA at minimal privilege.
+      # See sandbox-mcp main.py: ensure_app_service_account / grant_project_role.
 
       - name: build and push image
         run: |
