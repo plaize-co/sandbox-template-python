@@ -8,7 +8,7 @@ Usage:
     s.dm("urara@plaize.co", "今日のタスクは 3件です")
 
 The SLACK_BOT_TOKEN env var is wired by the deploy workflow if your sandbox.yaml
-declares `data.slack: true`. The shared `plaize-sandbox-bot` token in Secret
+declares `data.slack: true`. The shared `plaize-assistant` token in Secret
 Manager (`sandbox-slack-bot-token`) is mounted into the container.
 
 The bot name / avatar is shared across all sandbox apps. If you need a custom
@@ -16,7 +16,7 @@ bot name per app, create a separate Slack App in admin UI and store its token
 under `app--<owner>--<app>--slack-token` (then ask Urara to wire it).
 
 The bot needs to be invited to the target channel first (Slack UI → channel →
-"+ Add apps" → plaize-sandbox-bot).
+"+ Add apps" → plaize-assistant).
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class Slack:
             raise RuntimeError(
                 "SLACK_BOT_TOKEN env var or token arg required. "
                 "Add `data.slack: true` to sandbox.yaml so the deploy workflow "
-                "mounts the shared plaize-sandbox-bot token."
+                "mounts the shared plaize-assistant token."
             )
         self._client = httpx.Client(
             base_url=SLACK_API_BASE,

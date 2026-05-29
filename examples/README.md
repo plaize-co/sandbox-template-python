@@ -46,12 +46,12 @@ data:
 **Slack に投稿する場合 (`slack-daily-digest.py`):**
 ```yaml
 data:
-  slack: true   # 共有 bot (plaize-sandbox-bot) のトークンを env に注入
+  slack: true   # 共有 bot (plaize-assistant) のトークンを env に注入
 cron:
   - schedule: "0 9 * * MON-FRI"
     command: "curl -fsS http://localhost:8080/jobs/daily"
 ```
-→ 投稿したいチャンネルに事前に bot を invite すること（Slack UI → チャンネル → `+ Add apps` → plaize-sandbox-bot）
+→ 投稿したいチャンネルに事前に bot を invite すること（Slack UI → チャンネル → `+ Add apps` → plaize-assistant）
 
 ### 3. requirements.txt に必要なパッケージを追記する
 

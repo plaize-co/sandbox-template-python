@@ -17,7 +17,7 @@ main.py の中身を以下に置き換えると：
         command: "curl -fsS http://localhost:8080/jobs/daily"
         # ※ cron は Phase 3 で Cloud Scheduler 経由になります
 
-bot は plaize-sandbox-bot を共有で使います。投稿したいチャンネルに
+bot は plaize-assistant を共有で使います。投稿したいチャンネルに
 事前に bot を invite してください（Slack UI → チャンネル → "+ Add apps"）。
 
 CHANNEL と GREETINGS を書き換えればすぐ動きます。
