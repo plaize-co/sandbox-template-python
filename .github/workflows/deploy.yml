@@ -52,8 +52,10 @@ jobs:
           data = d.get("data") or {}
           uses_notion = bool(data.get("notion"))
           uses_firestore = bool(data.get("firestore"))
+          uses_slack = bool(data.get("slack"))
           print(f"uses_notion={'1' if uses_notion else '0'}")
           print(f"uses_firestore={'1' if uses_firestore else '0'}")
+          print(f"uses_slack={'1' if uses_slack else '0'}")
           PY
 
       - id: auth
@@ -85,12 +87,16 @@ jobs:
           ENV_VARS="^|^SANDBOX_OWNER=${{ steps.meta.outputs.owner }}|SANDBOX_APP=${{ steps.meta.outputs.app }}|APP_NAME=$(yq -r .name sandbox.yaml 2>/dev/null || echo sandbox)"
           echo "env_vars=$ENV_VARS" >> "$GITHUB_OUTPUT"
 
-          # Secrets: only mount NOTION_TOKEN if app uses Notion
+          # Secrets: mount tokens conditionally based on data.* in sandbox.yaml
+          SECRETS=()
           if [ "${{ steps.meta.outputs.uses_notion }}" = "1" ]; then
-            echo "secrets=NOTION_TOKEN=app--${{ steps.meta.outputs.owner }}--${{ steps.meta.outputs.app }}--notion-token:latest" >> "$GITHUB_OUTPUT"
-          else
-            echo "secrets=" >> "$GITHUB_OUTPUT"
+            SECRETS+=("NOTION_TOKEN=app--${{ steps.meta.outputs.owner }}--${{ steps.meta.outputs.app }}--notion-token:latest")
           fi
+          if [ "${{ steps.meta.outputs.uses_slack }}" = "1" ]; then
+            # Shared bot token — see sdks/slack.py for the per-app override path
+            SECRETS+=("SLACK_BOT_TOKEN=sandbox-slack-bot-token:latest")
+          fi
+          IFS=',' ; echo "secrets=${SECRETS[*]}" >> "$GITHUB_OUTPUT"
 
       - name: deploy to Cloud Run
         run: |
