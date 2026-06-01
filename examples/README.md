@@ -2,6 +2,11 @@
 
 `main.py` の置き換えサンプル集です。Claude に「このファイルを参考に main.py を書いて」と伝えるか、そのままコピーして使ってください。
 
+> **ブラウザ画面を持たない「定期実行だけの裏方ジョブ」を作りたい場合**は、この Web アプリ用テンプレ
+> ではなく **[`sandbox-template-job`](https://github.com/plaize-co/sandbox-template-job)**（`runtime: job`）
+> を使ってください。Cloud Run Job + Cloud Scheduler で cron 実行され、HTTP サーバを持ちません。
+> 例: 毎月 Notion に請求書の行を追加 / 週次で Slack に集計を投稿。
+
 ## ファイル一覧
 
 | ファイル | 説明 | 必要な data |
@@ -82,6 +87,9 @@ git push
 │
 ├─ Slack に投稿したい（cron / Webhook 受信） → data.slack: true
 │    └─ 例: slack-daily-digest.py
+│
+├─ ブラウザ画面を持たない定期実行だけの裏方処理 → 別テンプレ sandbox-template-job (runtime: job)
+│    └─ 例: 毎月 Notion に請求書行を追加 / 週次 Slack 集計
 │
 └─ 外部 API を叩くだけ / 計算機 → data: 不要
      └─ 例: external-api.py
