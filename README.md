@@ -73,6 +73,32 @@ plaize Sandbox 基盤の **Python (FastAPI) アプリ向けテンプレート**�
    別アプリのデータが見えないよう保護される予定。**まだ Phase 2 セットアップ前は
    Firestore は本格的に使わないこと**
 
+## 任意のシークレット (secrets)
+
+Notion / Firestore 以外の API キー等が必要な場合は `sandbox.yaml` に書く：
+
+```yaml
+secrets:
+  - ANTHROPIC_API_KEY
+  - CONNPASS_API_KEY
+```
+
+→ デプロイ時に env var `ANTHROPIC_API_KEY` / `CONNPASS_API_KEY` として、Secret Manager の
+`app--<owner>--<app>--anthropic-api-key` / `app--<owner>--<app>--connpass-api-key`（`:latest`）
+が自動マウントされる（名前は小文字化 + `_` → `-`）。
+
+**事前に Urara（admin）がシークレットを作成し、アプリの SA にアクセス権を付与する必要がある：**
+
+```bash
+gcloud secrets create app--<owner>--<app>--<name> --project=plaize-sandbox-prod --replication-policy=automatic
+printf %s "$VALUE" | gcloud secrets versions add app--<owner>--<app>--<name> --project=plaize-sandbox-prod --data-file=-
+gcloud secrets add-iam-policy-binding app--<owner>--<app>--<name> --project=plaize-sandbox-prod \
+  --member=serviceAccount:app-<owner>-<app>@plaize-sandbox-prod.iam.gserviceaccount.com \
+  --role=roles/secretmanager.secretAccessor
+```
+
+デプロイ前にシークレットが存在しないと `--set-secrets` が失敗する。
+
 ## ローカル動作確認
 
 ```bash

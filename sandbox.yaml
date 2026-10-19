@@ -12,6 +12,10 @@ data: {}                            # Set this if the app uses Notion or Firesto
                                     #       access: "read-write"
                                     #   firestore: true
 
+# secrets:                          # optional. Arbitrary env var names, UPPER_SNAKE_CASE.
+#   - ANTHROPIC_API_KEY             # mounted from Secret Manager at app--<owner>--<app>--anthropic-api-key:latest
+#   - CONNPASS_API_KEY
+
 # --- Lifetime: pick one ---
 expires_at: 2026-11-15              # temporary (default). Max +180 days from creation.
 # lifetime: permanent               # uncomment + delete expires_at for long-term apps.

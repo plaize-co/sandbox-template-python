@@ -59,6 +59,21 @@ def root(x_auth_request_email: Annotated[str | None, Header()] = None):
     return f"hello {x_auth_request_email}"
 ```
 
+## 任意のシークレット (secrets)
+
+Notion / Firestore 以外の API キー等が必要な場合、`sandbox.yaml` に追記：
+
+```yaml
+secrets:
+  - ANTHROPIC_API_KEY
+  - CONNPASS_API_KEY
+```
+
+デプロイ時に `app--<owner>--<app>--<name のkebab-case>:latest`（Secret Manager）から
+同名の env var としてマウントされる。**シークレット自体は Urara（admin）が事前に作成し、
+アプリの SA にアクセス権を付与する必要がある**（README 参照）。存在しないと
+`--set-secrets` でデプロイが失敗する。
+
 ## デプロイ
 
 `git push origin main` → GitHub Actions が動く。失敗したら Claude に「Actions の失敗ログ見せて」と頼む。
