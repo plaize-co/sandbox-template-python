@@ -43,6 +43,8 @@ jobs:
         id: meta
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import sys
           import yaml
           d = yaml.safe_load(open("sandbox.yaml"))
           print(f"owner={d['owner']}")
@@ -56,6 +58,13 @@ jobs:
           print(f"uses_notion={'1' if uses_notion else '0'}")
           print(f"uses_firestore={'1' if uses_firestore else '0'}")
           print(f"uses_slack={'1' if uses_slack else '0'}")
+          secrets = d.get("secrets") or []
+          name_re = re.compile(r"^[A-Z][A-Z0-9_]*$")
+          for s in secrets:
+              if not isinstance(s, str) or not name_re.match(s):
+                  print(f"::error::secrets entry {s!r} must match {name_re.pattern}", file=sys.stderr)
+                  sys.exit(1)
+          print(f"custom_secrets={' '.join(secrets)}")
           PY
 
       - id: auth
@@ -96,6 +105,10 @@ jobs:
             # Shared bot token — see sdks/slack.py for the per-app override path
             SECRETS+=("SLACK_BOT_TOKEN=sandbox-slack-bot-token:latest")
           fi
+          for NAME in ${{ steps.meta.outputs.custom_secrets }}; do
+            KEBAB=$(echo "$NAME" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+            SECRETS+=("${NAME}=app--${{ steps.meta.outputs.owner }}--${{ steps.meta.outputs.app }}--${KEBAB}:latest")
+          done
           IFS=',' ; echo "secrets=${SECRETS[*]}" >> "$GITHUB_OUTPUT"
 
       - name: deploy to Cloud Run

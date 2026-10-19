@@ -16,6 +16,7 @@ import yaml
 
 OWNER_RE = re.compile(r"^[a-z0-9]+$")           # no hyphens — must be a single segment
 APP_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}[a-z0-9]$")
+SECRET_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 ALLOWED_RUNTIMES = {"python", "static", "node"}  # python template defaults to python
 REQUIRED_FIELDS = {"name", "owner", "app", "runtime", "purpose"}
 MAX_TEMPORARY_DAYS = 180
@@ -88,6 +89,16 @@ def validate(path: Path) -> list[str]:
             errors.append("data.notion must be a list of {id, access} entries")
         if "firestore" in data_section and not isinstance(data_section["firestore"], bool):
             errors.append("data.firestore must be a boolean")
+
+    # secrets: optional list of env var names, mounted from Secret Manager.
+    secrets = data.get("secrets")
+    if secrets is not None:
+        if not isinstance(secrets, list) or not all(isinstance(s, str) for s in secrets):
+            errors.append("secrets must be a list of strings")
+        else:
+            for s in secrets:
+                if not SECRET_NAME_RE.match(s):
+                    errors.append(f"secrets entry {s!r} must match {SECRET_NAME_RE.pattern}")
 
     return errors
 
